@@ -58,8 +58,14 @@ def get_existing_video_ids(transcripts_dir: Path) -> set[str]:
     return ids
 
 
-def get_channel_videos(channel_handle: str, limit: int = 50) -> list[dict]:
-    """Get recent video metadata from a channel using yt-dlp."""
+def get_channel_videos(channel_handle: str, limit: int = 50,
+                       date_from: str | None = None, date_to: str | None = None) -> list[dict]:
+    """Get recent video metadata from a channel using yt-dlp.
+
+    Args:
+        date_from: Include videos on or after this date (YYYY-MM-DD)
+        date_to: Include videos on or before this date (YYYY-MM-DD)
+    """
     url = f"https://www.youtube.com/{channel_handle}/videos"
     console.print(f"[bold]Fetching video list from {channel_handle}...[/bold]")
 
@@ -68,8 +74,15 @@ def get_channel_videos(channel_handle: str, limit: int = 50) -> list[dict]:
         "--flat-playlist",
         "--dump-json",
         "--playlist-end", str(limit),
-        url,
     ]
+
+    # yt-dlp uses YYYYMMDD for date ranges
+    if date_from:
+        cmd.extend(["--dateafter", date_from.replace("-", "")])
+    if date_to:
+        cmd.extend(["--datebefore", date_to.replace("-", "")])
+
+    cmd.append(url)
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
@@ -247,6 +260,8 @@ def main():
     parser.add_argument("--channel", help="YouTube channel handle (e.g. @NateBJones)")
     parser.add_argument("--url", help="Single YouTube video URL")
     parser.add_argument("--limit", type=int, default=50, help="Max videos to check from channel (default: 50)")
+    parser.add_argument("--date-from", help="Only include videos on or after this date (YYYY-MM-DD)")
+    parser.add_argument("--date-to", help="Only include videos on or before this date (YYYY-MM-DD)")
     args = parser.parse_args()
 
     if not args.channel and not args.url:
@@ -275,7 +290,8 @@ def main():
 
     elif args.channel:
         # Channel — get recent videos
-        all_videos = get_channel_videos(args.channel, limit=args.limit)
+        all_videos = get_channel_videos(args.channel, limit=args.limit,
+                                        date_from=args.date_from, date_to=args.date_to)
         for v in all_videos:
             if v["id"] not in existing_ids:
                 videos_to_fetch.append(v)
