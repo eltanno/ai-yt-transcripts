@@ -62,6 +62,21 @@ python -m src.query "prompt engineering" --date-from 2026-02-01 --date-to 2026-0
 
 ## Adding new transcripts
 
+### Automated: Fetch from YouTube channel
+
+```bash
+# Fetch latest videos not already in transcripts/
+python -m src.fetch --channel @NateBJones
+
+# Fetch specific video by URL
+python -m src.fetch --url "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Fetch and immediately re-ingest
+python -m src.fetch --channel @NateBJones && python -m src.ingest
+```
+
+### Manual
+
 1. Add `.md` files to `transcripts/` following the existing format:
    ```markdown
    # Video Title
@@ -77,6 +92,17 @@ python -m src.query "prompt engineering" --date-from 2026-02-01 --date-to 2026-0
    Full transcript text here...
    ```
 2. Re-run ingestion: `python -m src.ingest`
+
+## How the transcripts were collected
+
+The initial corpus was scraped from [@NateBJones](https://www.youtube.com/@NateBJones) (Jan 12 - Mar 12, 2026) using this workflow:
+
+1. **Browse channel** — Playwright browser automation navigated to the channel's `/videos` page and scrolled to load all recent uploads
+2. **Extract video metadata** — Titles, video IDs, view counts, and relative dates were parsed from the page snapshot
+3. **Fetch transcripts** — `youtube-transcript-api` Python library pulled auto-generated captions for each video. When rate-limited, `yt-dlp` was used as a fallback to download VTT/json3 subtitle files
+4. **Generate markdown** — Each video was written as a markdown file (`YYYY-MM-DD-kebab-title.md`) with metadata header and full transcript text formatted into flowing paragraphs
+
+The `src/fetch.py` script automates steps 2-4 for ongoing updates.
 
 ## Architecture
 
