@@ -224,13 +224,8 @@ def main():
 
     db = lancedb.connect(DB_PATH)
 
-    # Drop existing table if it exists (idempotent)
-    existing_tables = db.list_tables()
-    if TABLE_NAME in existing_tables:
-        db.drop_table(TABLE_NAME)
-        console.print(f"  Dropped existing '{TABLE_NAME}' table")
-
-    table = db.create_table(TABLE_NAME, data=records)
+    # Overwrite existing table (re-embeds everything)
+    table = db.create_table(TABLE_NAME, data=records, mode="overwrite")
     console.print(f"  Created table '{TABLE_NAME}' with {len(records)} rows")
     console.print()
 
