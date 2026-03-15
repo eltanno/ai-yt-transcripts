@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@anthropic-ai/mcp-playwright@latest",
+        "--headless=false",
+        "--userDataDir",
+        "/home/agent/.cache/ms-playwright/mcp-yt-transcripts-profile"
+      ]
+    }
+  }
+}

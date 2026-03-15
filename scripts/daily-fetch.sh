@@ -4,10 +4,22 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Activate virtual environment
+source .venv/bin/activate
+
 echo "=== $(date '+%Y-%m-%d %H:%M') Starting daily fetch ==="
 
-# Fetch new videos
-python -m src.fetch --channel @NateBJones --limit 10
+# Channels to fetch (add new handles here)
+CHANNELS=(
+    @NateBJones
+    @nateherk
+)
+
+# Fetch new videos from each channel
+for channel in "${CHANNELS[@]}"; do
+    echo "--- Fetching $channel ---"
+    python -m src.fetch --channel "$channel" --limit 10
+done
 
 # Check if any new files were added
 if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard transcripts/)" ]; then

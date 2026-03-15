@@ -223,12 +223,36 @@ def format_date(date_str: str) -> str:
     return date_str
 
 
-def save_transcript(video: dict, transcript: str, transcripts_dir: Path) -> Path:
+def channel_slug(channel_name: str) -> str:
+    """Derive a short slug from a channel display name or handle."""
+    lower = channel_name.lower()
+    # Match known channels by handle or display name keywords
+    if "natebjones" in lower or "nate b jones" in lower:
+        return "natebjones"
+    if "nateherk" in lower or "nate herk" in lower:
+        return "nateherk"
+    # Fallback: slugify the channel name
+    return re.sub(r"[^a-z0-9]+", "-", lower.lstrip("@")).strip("-")[:20]
+
+
+def save_transcript(video: dict, transcript: str, transcripts_dir: Path,
+                    channel_handle: str | None = None) -> Path:
     """Save a video transcript as a markdown file."""
     date = format_date(video.get("upload_date", ""))
     title = video.get("title", "untitled")
     slug = slugify(title)
-    filename = f"{date}-{slug}.md"
+
+    # Determine channel prefix
+    ch_slug = ""
+    if channel_handle:
+        ch_slug = channel_slug(channel_handle)
+    elif video.get("channel"):
+        ch_slug = channel_slug(video["channel"])
+
+    if ch_slug:
+        filename = f"{ch_slug}-{date}-{slug}.md"
+    else:
+        filename = f"{date}-{slug}.md"
     filepath = transcripts_dir / filename
 
     channel = video.get("channel", "Unknown")
@@ -320,7 +344,8 @@ def main():
             console.print(f"  [yellow]No transcript available — creating placeholder[/yellow]")
             transcript = "Transcript not yet available."
 
-        filepath = save_transcript(video, transcript, TRANSCRIPTS_DIR)
+        filepath = save_transcript(video, transcript, TRANSCRIPTS_DIR,
+                                    channel_handle=args.channel)
         console.print(f"  [green]Saved:[/green] {filepath.name}")
         success += 1
 
