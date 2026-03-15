@@ -27,3 +27,7 @@ TRANSCRIPTS_DIR: Path = _PROJECT_ROOT / "transcripts"
 
 # Query defaults
 DEFAULT_TOP_K: int = 5
+
+# Time decay
+DECAY_HALF_LIFE_DAYS: int = 60
+DECAY_FLOOR: float = 0.1

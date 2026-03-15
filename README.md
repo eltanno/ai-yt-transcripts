@@ -50,7 +50,10 @@ Options:
 --limit, -k       Number of results (default: 5)
 --date-from       Filter from date (YYYY-MM-DD)
 --date-to         Filter to date (YYYY-MM-DD)
+--no-decay        Disable time decay (show raw similarity scores)
 ```
+
+By default, results are scored with exponential time decay (60-day half-life) so newer videos rank higher. Use `--no-decay` for raw similarity ranking.
 
 Examples:
 
@@ -73,6 +76,18 @@ python -m src.fetch --url "https://www.youtube.com/watch?v=VIDEO_ID"
 
 # Fetch and immediately re-ingest
 python -m src.fetch --channel @NateBJones && python -m src.ingest
+```
+
+### Daily cron
+
+A script at `scripts/daily-fetch.sh` handles the full pipeline: fetch new videos, re-ingest into LanceDB, commit, and push. It skips everything if there's nothing new.
+
+```bash
+# Add to your crontab (runs daily at 9:17 AM)
+crontab -e
+
+# Add this line:
+17 9 * * * cd /path/to/ai-yt-transcripts && bash scripts/daily-fetch.sh >> /tmp/yt-fetch.log 2>&1
 ```
 
 ### Manual

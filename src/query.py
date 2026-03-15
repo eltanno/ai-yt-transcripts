@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from datetime import datetime
 
 import lancedb
 from openai import OpenAI
@@ -16,9 +17,43 @@ from src.config import (
     DB_PATH,
     TABLE_NAME,
     DEFAULT_TOP_K,
+    DECAY_HALF_LIFE_DAYS,
+    DECAY_FLOOR,
 )
 
 console = Console()
+
+
+def apply_time_decay(
+    results: list[dict],
+    half_life_days: int = DECAY_HALF_LIFE_DAYS,
+    floor: float = DECAY_FLOOR,
+) -> list[dict]:
+    """Apply exponential time decay to search result scores and re-sort.
+
+    adjusted_score = similarity * max(floor, 0.5 ^ (age_days / half_life))
+    """
+    today = datetime.now().date()
+
+    for result in results:
+        distance = result.get("_distance", 0)
+        similarity = 1 / (1 + distance)
+
+        date_str = result.get("date", "")
+        if date_str:
+            try:
+                video_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                age_days = (today - video_date).days
+            except ValueError:
+                age_days = 0
+        else:
+            age_days = 0
+
+        decay = max(floor, 0.5 ** (age_days / half_life_days))
+        result["_decayed_score"] = similarity * decay
+
+    results.sort(key=lambda r: r["_decayed_score"], reverse=True)
+    return results
 
 
 def get_query_embedding(client: OpenAI, text: str) -> list[float]:
@@ -38,11 +73,14 @@ def search(
     limit: int = DEFAULT_TOP_K,
     date_from: str | None = None,
     date_to: str | None = None,
+    use_decay: bool = True,
 ) -> list[dict]:
     """Search the transcript database using vector similarity."""
     query_vector = get_query_embedding(client, query)
 
-    search_builder = table.search(query_vector).limit(limit)
+    # Fetch extra candidates when decay is on so re-ranking still yields enough results
+    fetch_limit = limit * 3 if use_decay else limit
+    search_builder = table.search(query_vector).limit(fetch_limit)
 
     # Apply date filters if provided
     if date_from and date_to:
@@ -55,6 +93,11 @@ def search(
         search_builder = search_builder.where(f"date <= '{date_to}'")
 
     results = search_builder.to_list()
+
+    if use_decay:
+        results = apply_time_decay(results)
+        results = results[:limit]
+
     return results
 
 
@@ -93,7 +136,10 @@ def display_results(results: list[dict], query: str):
         if url:
             meta_parts.append(f"[link={url}]{url}[/link]")
         meta_parts.append(f"Chunk {chunk_idx + 1}/{total_chunks}")
-        meta_parts.append(f"Similarity: {similarity:.3f}")
+        if "_decayed_score" in result:
+            meta_parts.append(f"Score: {result['_decayed_score']:.3f} (sim: {similarity:.3f})")
+        else:
+            meta_parts.append(f"Similarity: {similarity:.3f}")
 
         panel_content = "\n".join(meta_parts) + "\n\n" + display_text
 
@@ -106,7 +152,7 @@ def display_results(results: list[dict], query: str):
         ))
 
 
-def interactive_mode(table, client: OpenAI, limit: int, date_from: str | None, date_to: str | None):
+def interactive_mode(table, client: OpenAI, limit: int, date_from: str | None, date_to: str | None, use_decay: bool = True):
     """Run an interactive query REPL."""
     console.print("[bold blue]YouTube Transcript Search[/bold blue]")
     console.print("[dim]Type your query and press Enter. Type 'quit' or Ctrl+C to exit.[/dim]")
@@ -120,7 +166,7 @@ def interactive_mode(table, client: OpenAI, limit: int, date_from: str | None, d
             if query.lower() in ("quit", "exit", "q"):
                 break
 
-            results = search(table, client, query, limit=limit, date_from=date_from, date_to=date_to)
+            results = search(table, client, query, limit=limit, date_from=date_from, date_to=date_to, use_decay=use_decay)
             display_results(results, query)
             console.print()
 
@@ -161,6 +207,12 @@ def main():
         default=None,
         help="Filter results up to this date (YYYY-MM-DD)",
     )
+    parser.add_argument(
+        "--no-decay",
+        action="store_true",
+        default=False,
+        help="Disable time decay (show raw similarity scores)",
+    )
 
     args = parser.parse_args()
 
@@ -179,13 +231,15 @@ def main():
 
     client = OpenAI(api_key=OPENAI_API_KEY)
 
+    use_decay = not args.no_decay
+
     if args.query:
         # Single query mode
-        results = search(table, client, args.query, limit=args.limit, date_from=args.date_from, date_to=args.date_to)
+        results = search(table, client, args.query, limit=args.limit, date_from=args.date_from, date_to=args.date_to, use_decay=use_decay)
         display_results(results, args.query)
     else:
         # Interactive mode
-        interactive_mode(table, client, limit=args.limit, date_from=args.date_from, date_to=args.date_to)
+        interactive_mode(table, client, limit=args.limit, date_from=args.date_from, date_to=args.date_to, use_decay=use_decay)
 
 
 if __name__ == "__main__":
