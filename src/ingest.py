@@ -12,14 +12,15 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 from src.config import (
-    OPENAI_API_KEY,
-    EMBEDDING_MODEL,
     EMBEDDING_DIMS,
     DB_PATH,
     TABLE_NAME,
     CHUNK_SIZE,
     CHUNK_OVERLAP,
     TRANSCRIPTS_DIR,
+    get_embedding_client,
+    get_embedding_model,
+    has_embedding_credentials,
 )
 
 console = Console()
@@ -97,11 +98,14 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
     return chunks
 
 
-def embed_texts(client: OpenAI, texts: list[str], model: str = EMBEDDING_MODEL, dims: int = EMBEDDING_DIMS) -> list[list[float]]:
+def embed_texts(client: OpenAI, texts: list[str], model: str | None = None, dims: int = EMBEDDING_DIMS) -> list[list[float]]:
     """Embed a batch of texts using the OpenAI API.
 
     Handles batching for the API (max 2048 inputs per request).
     """
+    if model is None:
+        model = get_embedding_model()
+
     all_embeddings = []
     batch_size = 2048
 
@@ -161,8 +165,8 @@ def main():
     """Run the full ingestion pipeline."""
     start_time = time.time()
 
-    if not OPENAI_API_KEY:
-        console.print("[red]Error: OPENAI_API_KEY not set. Check your .env file.[/red]")
+    if not has_embedding_credentials():
+        console.print("[red]Error: No embedding credentials set. Set OPENAI_API_KEY or AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT in your .env file.[/red]")
         return
 
     console.print("[bold blue]YouTube Transcript RAG Ingestion[/bold blue]")
@@ -180,7 +184,8 @@ def main():
 
     # 2. Generate embeddings
     console.print("[bold]Step 2:[/bold] Generating embeddings...")
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = get_embedding_client()
+    model = get_embedding_model()
     texts = [r["text"] for r in records]
 
     with Progress(
@@ -201,7 +206,7 @@ def main():
             batch = texts[i : i + batch_size]
             response = client.embeddings.create(
                 input=batch,
-                model=EMBEDDING_MODEL,
+                model=model,
                 dimensions=EMBEDDING_DIMS,
             )
             batch_embeddings = [item.embedding for item in response.data]

@@ -11,14 +11,15 @@ from rich.panel import Panel
 from rich.text import Text
 
 from src.config import (
-    OPENAI_API_KEY,
-    EMBEDDING_MODEL,
     EMBEDDING_DIMS,
     DB_PATH,
     TABLE_NAME,
     DEFAULT_TOP_K,
     DECAY_HALF_LIFE_DAYS,
     DECAY_FLOOR,
+    get_embedding_client,
+    get_embedding_model,
+    has_embedding_credentials,
 )
 
 console = Console()
@@ -60,7 +61,7 @@ def get_query_embedding(client: OpenAI, text: str) -> list[float]:
     """Embed the query text."""
     response = client.embeddings.create(
         input=[text],
-        model=EMBEDDING_MODEL,
+        model=get_embedding_model(),
         dimensions=EMBEDDING_DIMS,
     )
     return response.data[0].embedding
@@ -216,8 +217,8 @@ def main():
 
     args = parser.parse_args()
 
-    if not OPENAI_API_KEY:
-        console.print("[red]Error: OPENAI_API_KEY not set. Check your .env file.[/red]")
+    if not has_embedding_credentials():
+        console.print("[red]Error: No embedding credentials set. Set OPENAI_API_KEY or AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT in your .env file.[/red]")
         sys.exit(1)
 
     # Connect to LanceDB
@@ -229,7 +230,7 @@ def main():
         console.print("[yellow]Have you run the ingestion script? python -m src.ingest[/yellow]")
         sys.exit(1)
 
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = get_embedding_client()
 
     use_decay = not args.no_decay
 
