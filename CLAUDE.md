@@ -29,6 +29,25 @@ python -m src.fetch --channel @NateBJones
 python -m src.ingest
 ```
 
+### Pagination: yt-dlp has a 50-video limit
+
+`--playlist-end` defaults to 50, so a single fetch only returns the most recent 50 videos. When fetching a channel's full history (or any channel with >50 videos), you **must paginate using date windows**:
+
+1. First fetch without date filters to get the newest 50.
+2. Check the oldest date returned.
+3. Fetch again with `--date-to <oldest_date - 1 day>` to get the next batch.
+4. Repeat until no new videos are returned.
+5. Run `python -m src.ingest` once at the end.
+
+Example multi-pass fetch:
+```bash
+python -m src.fetch --channel @garyseconomics                          # gets newest 50
+python -m src.fetch --channel @garyseconomics --date-to 2024-06-01     # next 50
+python -m src.fetch --channel @garyseconomics --date-to 2023-01-01     # next 50
+# ... continue until 0 new videos
+python -m src.ingest
+```
+
 ## Processing Rules
 
 1. When a user sends a message, treat it as a search query against the transcript database
