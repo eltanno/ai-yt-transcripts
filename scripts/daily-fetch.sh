@@ -9,6 +9,9 @@ source .venv/bin/activate
 
 echo "=== $(date '+%Y-%m-%d %H:%M') Starting daily fetch ==="
 
+# Pull latest from remote before starting
+git pull --rebase
+
 # Channels to fetch (add new handles here)
 CHANNELS=(
     @NateBJones

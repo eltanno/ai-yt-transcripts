@@ -7,3 +7,5 @@ dist/
 build/
 .password-store/
 .claude/scheduled_tasks.lock
+logs/
+tmp/
