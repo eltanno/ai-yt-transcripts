@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How YouTube RAG Search Works</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: #0a1628;
+            color: #e0e8f0;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Grid background */
+        body::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(rgba(37, 99, 235, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(37, 99, 235, 0.06) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 30% 20%, rgba(37, 99, 235, 0.12) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 60%);
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            padding: 48px 64px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Title */
+        .title-section {
+            text-align: center;
+            margin-bottom: 12px;
+        }
+
+        .title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 44px;
+            font-weight: 800;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #60a5fa, #06b6d4, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 18px;
+            color: #64748b;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        /* Divider line */
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #2563eb, #06b6d4, #2563eb, transparent);
+            margin: 16px 0 36px 0;
+        }
+
+        /* Pipeline */
+        .pipeline {
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            gap: 0;
+            flex: 1;
+        }
+
+        /* Stage */
+        .stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            max-width: 400px;
+        }
+
+        .stage-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .stage-number {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 36px;
+            font-weight: 900;
+            color: #1e3a5f;
+            -webkit-text-stroke: 1.5px #2563eb;
+            line-height: 1;
+        }
+
+        .stage-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #f59e0b;
+        }
+
+        /* Stage card */
+        .stage-card {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 95, 0.7));
+            border: 1px solid rgba(37, 99, 235, 0.3);
+            border-radius: 12px;
+            padding: 24px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            backdrop-filter: blur(8px);
+        }
+
+        .stage-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 20px;
+            right: 20px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #2563eb, transparent);
+        }
+
+        /* Icon */
+        .stage-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(37, 99, 235, 0.4);
+            background: rgba(37, 99, 235, 0.1);
+        }
+
+        .stage-desc {
+            font-size: 19px;
+            line-height: 1.6;
+            color: #c0cad8;
+            margin-bottom: 20px;
+            flex: 1;
+        }
+
+        /* Tags */
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 15px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            background: rgba(6, 182, 212, 0.08);
+            color: #06b6d4;
+            letter-spacing: 0.5px;
+        }
+
+        .tag.highlight {
+            border-color: rgba(245, 158, 11, 0.4);
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+        }
+
+        /* Arrow connector */
+        .arrow-connector {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            flex-shrink: 0;
+            padding-top: 48px;
+        }
+
+        .arrow-connector svg {
+            width: 40px;
+            height: 40px;
+        }
+
+        /* Flow bar at bottom */
+        .flow-bar {
+            margin-top: 32px;
+            padding: 16px 24px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(37, 99, 235, 0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+        }
+
+        .flow-item {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 16px;
+            color: #94a3b8;
+            white-space: nowrap;
+        }
+
+        .flow-arrow {
+            color: #2563eb;
+            margin: 0 12px;
+            font-size: 14px;
+        }
+
+        .flow-item.active {
+            color: #60a5fa;
+            font-weight: 600;
+        }
+
+        /* Corner decorations */
+        .corner {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            z-index: 2;
+        }
+        .corner-tl { top: 16px; left: 16px; border-top: 2px solid #2563eb; border-left: 2px solid #2563eb; }
+        .corner-tr { top: 16px; right: 16px; border-top: 2px solid #2563eb; border-right: 2px solid #2563eb; }
+        .corner-bl { bottom: 16px; left: 16px; border-bottom: 2px solid #2563eb; border-left: 2px solid #2563eb; }
+        .corner-br { bottom: 16px; right: 16px; border-bottom: 2px solid #2563eb; border-right: 2px solid #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+
+    <div class="container">
+        <div class="title-section">
+            <div class="title">How YouTube RAG Search Works</div>
+            <div class="subtitle">Retrieval-Augmented Generation Pipeline &mdash; From Video to Searchable Knowledge</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="pipeline">
+            <!-- Stage 1: Fetch -->
+            <div class="stage">
+                <div class="stage-header">
+                    <div class="stage-number">01</div>
+                    <div class="stage-name">Fetch</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    </div>
+                    <div class="stage-desc">
+                        yt-dlp downloads transcripts from tracked YouTube channels in batches of 50 videos. Date-windowed pagination handles full channel histories. A daily cron job automates the entire process.
+                    </div>
+                    <div class="tags">
+                        <span class="tag highlight">yt-dlp</span>
+                        <span class="tag">50 videos/batch</span>
+                        <span class="tag">daily-fetch.sh</span>
+                        <span class="tag">transcripts/*.md</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Arrow -->
+            <div class="arrow-connector">
+                <svg viewBox="0 0 40 40" fill="none">
+                    <path d="M8 20 H28" stroke="#2563eb" stroke-width="2" stroke-dasharray="4 3"/>
+                    <path d="M25 14 L32 20 L25 26" stroke="#2563eb" stroke-width="2" fill="none"/>
+                </svg>
+            </div>
+
+            <!-- Stage 2: Ingest -->
+            <div class="stage">
+                <div class="stage-header">
+                    <div class="stage-number">02</div>
+                    <div class="stage-name">Ingest</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    </div>
+                    <div class="stage-desc">
+                        Transcripts are chunked by token count with overlap. Each chunk is embedded via OpenAI text-embedding-3-large into 1536-dimensional vectors, then stored in a local LanceDB database.
+                    </div>
+                    <div class="tags">
+                        <span class="tag highlight">text-embedding-3-large</span>
+                        <span class="tag">1536 dimensions</span>
+                        <span class="tag highlight">LanceDB</span>
+                        <span class="tag">chunk + overlap</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Arrow -->
+            <div class="arrow-connector">
+                <svg viewBox="0 0 40 40" fill="none">
+                    <path d="M8 20 H28" stroke="#2563eb" stroke-width="2" stroke-dasharray="4 3"/>
+                    <path d="M25 14 L32 20 L25 26" stroke="#2563eb" stroke-width="2" fill="none"/>
+                </svg>
+            </div>
+
+            <!-- Stage 3: Query -->
+            <div class="stage">
+                <div class="stage-header">
+                    <div class="stage-number">03</div>
+                    <div class="stage-name">Query</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+                    </div>
+                    <div class="stage-desc">
+                        The user's search query is embedded with the same model. LanceDB finds the most similar chunks via vector distance. Exponential time-decay boosts recent content: score&nbsp;=&nbsp;similarity&nbsp;&times;&nbsp;max(floor,&nbsp;0.5^(age/half_life)).
+                    </div>
+                    <div class="tags">
+                        <span class="tag">semantic search</span>
+                        <span class="tag">vector similarity</span>
+                        <span class="tag highlight">time decay scoring</span>
+                        <span class="tag">top-K results</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Arrow -->
+            <div class="arrow-connector">
+                <svg viewBox="0 0 40 40" fill="none">
+                    <path d="M8 20 H28" stroke="#2563eb" stroke-width="2" stroke-dasharray="4 3"/>
+                    <path d="M25 14 L32 20 L25 26" stroke="#2563eb" stroke-width="2" fill="none"/>
+                </svg>
+            </div>
+
+            <!-- Stage 4: Respond -->
+            <div class="stage">
+                <div class="stage-header">
+                    <div class="stage-number">04</div>
+                    <div class="stage-name">Respond</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    </div>
+                    <div class="stage-desc">
+                        Claude (Sonnet for routine queries, Opus for complex multi-transcript analysis) receives the top matching chunks and produces a formatted response with video title, date, URL, and relevant quotes.
+                    </div>
+                    <div class="tags">
+                        <span class="tag highlight">Claude Sonnet / Opus</span>
+                        <span class="tag">title + date + URL</span>
+                        <span class="tag">relevant quotes</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flow bar -->
+        <div class="flow-bar">
+            <span class="flow-item active">YouTube Channels</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">yt-dlp</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">Markdown</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item active">Embeddings</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">LanceDB</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">Query</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item active">Claude</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">Response</span>
+        </div>
+    </div>
+</body>
+</html>
