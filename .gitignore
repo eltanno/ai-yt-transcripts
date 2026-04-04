@@ -1,4 +1,5 @@
 .env
+.baoyu-skills/.env
 __pycache__/
 *.pyc
 .venv/

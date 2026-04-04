@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "baoyu-imagine": {
+      "source": "jimliu/baoyu-skills",
+      "sourceType": "github",
+      "computedHash": "b9ea8a14f3c62a1b8887482c09d68043ea6e4c2bb695213a265f9ba9ea75596a"
+    },
+    "baoyu-infographic": {
+      "source": "jimliu/baoyu-skills",
+      "sourceType": "github",
+      "computedHash": "58e24b3929ca0beea8f0244dcd8e9cd88f45cc4466a30086d054e9bb6f83534b"
+    }
+  }
+}
