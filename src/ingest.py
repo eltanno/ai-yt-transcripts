@@ -26,6 +26,17 @@ from src.config import (
 console = Console()
 
 
+def get_existing_source_files(db_path: Path, table_name: str) -> set[str]:
+    """Get set of source_file names already in the database."""
+    try:
+        db = lancedb.connect(db_path)
+        table = db.open_table(table_name)
+        df = table.search().select(["source_file"]).limit(100000).to_pandas()
+        return set(df["source_file"].unique())
+    except Exception:
+        return set()  # Table doesn't exist yet
+
+
 def parse_metadata(text: str) -> dict:
     """Extract metadata from the markdown header.
 
@@ -122,12 +133,20 @@ def embed_texts(client: OpenAI, texts: list[str], model: str | None = None, dims
     return all_embeddings
 
 
-def parse_all_transcripts(transcripts_dir: Path) -> list[dict]:
-    """Parse all markdown files and return chunked records with metadata."""
+def parse_all_transcripts(transcripts_dir: Path, only_files: set[str] | None = None) -> list[dict]:
+    """Parse markdown files and return chunked records with metadata.
+
+    Args:
+        only_files: If provided, only process files whose names are in this set
+    """
     records = []
     md_files = sorted(transcripts_dir.glob("*.md"))
+    total_files = len(md_files)
 
-    console.print(f"[bold]Found {len(md_files)} transcript files[/bold]")
+    if only_files is not None:
+        md_files = [f for f in md_files if f.name in only_files]
+
+    console.print(f"[bold]Found {total_files} transcript files ({len(md_files)} to process)[/bold]")
 
     skipped = 0
     for md_file in md_files:
@@ -162,7 +181,14 @@ def parse_all_transcripts(transcripts_dir: Path) -> list[dict]:
 
 
 def main():
-    """Run the full ingestion pipeline."""
+    """Run the ingestion pipeline (incremental by default)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Ingest YouTube transcripts into LanceDB")
+    parser.add_argument("--full", action="store_true",
+                        help="Force full re-ingestion (overwrite existing)")
+    args = parser.parse_args()
+
     start_time = time.time()
 
     if not has_embedding_credentials():
@@ -172,14 +198,35 @@ def main():
     console.print("[bold blue]YouTube Transcript RAG Ingestion[/bold blue]")
     console.print()
 
+    # Check what's already ingested (unless doing full re-ingest)
+    existing_files: set[str] = set()
+    if not args.full:
+        existing_files = get_existing_source_files(DB_PATH, TABLE_NAME)
+
+    all_md_files = {f.name for f in TRANSCRIPTS_DIR.glob("*.md")}
+    new_files = all_md_files - existing_files
+
+    if not new_files and not args.full:
+        console.print("[green]All transcripts already ingested. Nothing to do.[/green]")
+        console.print(f"[dim]({len(existing_files)} files in database, use --full to re-ingest)[/dim]")
+        return
+
+    if args.full:
+        console.print(f"[bold yellow]Full re-ingestion mode[/bold yellow] - processing all {len(all_md_files)} files")
+        only_files = None
+    else:
+        console.print(f"[bold]{len(new_files)} new files to ingest[/bold] (skipping {len(existing_files)} existing)")
+        only_files = new_files
+
     # 1. Parse transcripts
+    console.print()
     console.print("[bold]Step 1:[/bold] Parsing transcript files...")
-    records = parse_all_transcripts(TRANSCRIPTS_DIR)
+    records = parse_all_transcripts(TRANSCRIPTS_DIR, only_files=only_files)
     console.print(f"  Created [green]{len(records)}[/green] chunks from transcripts")
     console.print()
 
     if not records:
-        console.print("[red]No chunks to process. Check your transcripts directory.[/red]")
+        console.print("[yellow]No chunks to process (files may lack transcripts).[/yellow]")
         return
 
     # 2. Generate embeddings
@@ -229,9 +276,16 @@ def main():
 
     db = lancedb.connect(DB_PATH)
 
-    # Overwrite existing table (re-embeds everything)
-    table = db.create_table(TABLE_NAME, data=records, mode="overwrite")
-    console.print(f"  Created table '{TABLE_NAME}' with {len(records)} rows")
+    if args.full or not existing_files:
+        # Full ingest: create/overwrite table
+        table = db.create_table(TABLE_NAME, data=records, mode="overwrite")
+        console.print(f"  Created table '{TABLE_NAME}' with {len(records)} rows")
+    else:
+        # Incremental: append to existing table
+        table = db.open_table(TABLE_NAME)
+        table.add(records)
+        console.print(f"  Appended {len(records)} chunks to '{TABLE_NAME}'")
+
     console.print()
 
     elapsed = time.time() - start_time
