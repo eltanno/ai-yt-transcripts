@@ -7,7 +7,7 @@ from pathlib import Path
 import lancedb
 import pyarrow as pa
 import tiktoken
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
@@ -251,11 +251,24 @@ def main():
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            response = client.embeddings.create(
-                input=batch,
-                model=model,
-                dimensions=EMBEDDING_DIMS,
-            )
+
+            # Retry with exponential backoff on rate limit
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    response = client.embeddings.create(
+                        input=batch,
+                        model=model,
+                        dimensions=EMBEDDING_DIMS,
+                    )
+                    break
+                except RateLimitError as e:
+                    if attempt == max_retries - 1:
+                        raise
+                    wait_time = 2 ** attempt  # 1, 2, 4, 8, 16 seconds
+                    progress.console.print(f"  [yellow]Rate limited, waiting {wait_time}s...[/yellow]")
+                    time.sleep(wait_time)
+
             batch_embeddings = [item.embedding for item in response.data]
             all_embeddings.extend(batch_embeddings)
             total_tokens += response.usage.total_tokens
