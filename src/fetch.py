@@ -194,10 +194,11 @@ def format_transcript_paragraphs(text: str, lines_per_para: int = 8) -> str:
     return "\n\n".join(paragraphs)
 
 
-def format_duration(seconds: int | None) -> str:
+def format_duration(seconds: int | float | None) -> str:
     """Format seconds into human-readable duration."""
     if not seconds:
         return "Unknown"
+    seconds = int(seconds)
     minutes = seconds // 60
     secs = seconds % 60
     if secs:
