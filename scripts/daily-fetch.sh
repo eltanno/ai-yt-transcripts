@@ -16,6 +16,7 @@ git pull --rebase
 CHANNELS=(
     @NateBJones
     @nateherk
+    @AIJasonZ
 )
 
 # Fetch new videos from each channel
